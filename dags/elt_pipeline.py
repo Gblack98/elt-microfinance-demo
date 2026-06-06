@@ -107,7 +107,7 @@ def run_quality_checks(**context):
 
     # 2. Nulls dans le mart
     nulls = con.execute("""
-        SELECT COUNT(*) FROM main.fct_portfolio_summary
+        SELECT COUNT(*) FROM main_main.fct_portfolio_summary
         WHERE loan_id IS NULL
     """).fetchone()[0]
     print(f"[quality] Nulls sur loan_id dans fct_portfolio_summary : {nulls}")
