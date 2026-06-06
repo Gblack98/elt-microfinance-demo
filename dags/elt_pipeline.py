@@ -194,24 +194,30 @@ extract_repay──┘              ─► [stg_clients  ]─┤─► int_loan_
         doc_md="Charge les 3 CSV dans DuckDB (schéma raw) via read_csv_auto()",
     )
 
+    # Variable d'environnement transmise à tous les BashOperator dbt
+    _dbt_env = {"ELT_PROJECT_DIR": str(PROJECT_DIR)}
+
     # ── 3. STAGING dbt (3 modèles parallèles) ─────────────
     with TaskGroup("dbt_staging", tooltip="Nettoyage et typage (vues dbt)") as tg_staging:
 
         dbt_stg_loans = BashOperator(
             task_id="stg_loans",
             bash_command=f"cd {DBT_DIR} && dbt run --profiles-dir {DBT_PROFILES} --select stg_loans",
+            env=_dbt_env,
             doc_md="Caste les types, filtre les nulls, normalise le statut",
         )
 
         dbt_stg_clients = BashOperator(
             task_id="stg_clients",
             bash_command=f"cd {DBT_DIR} && dbt run --profiles-dir {DBT_PROFILES} --select stg_clients",
+            env=_dbt_env,
             doc_md="Normalise le genre, calcule l'âge, formate le téléphone",
         )
 
         dbt_stg_repayments = BashOperator(
             task_id="stg_repayments",
             bash_command=f"cd {DBT_DIR} && dbt run --profiles-dir {DBT_PROFILES} --select stg_repayments",
+            env=_dbt_env,
             doc_md="Valide les montants, typage date",
         )
 
@@ -222,6 +228,7 @@ extract_repay──┘              ─► [stg_clients  ]─┤─► int_loan_
             f"cd {DBT_DIR} && "
             f"dbt run --profiles-dir {DBT_PROFILES} --select int_loan_with_repayments"
         ),
+        env=_dbt_env,
         doc_md="Jointure prêts × remboursements, calcul taux de remboursement",
     )
 
@@ -232,6 +239,7 @@ extract_repay──┘              ─► [stg_clients  ]─┤─► int_loan_
             f"cd {DBT_DIR} && "
             f"dbt run --profiles-dir {DBT_PROFILES} --select fct_portfolio_summary"
         ),
+        env=_dbt_env,
         doc_md="Agrégation mensuelle par devise : volume, taux de défaut, taux de remboursement",
     )
 
@@ -242,6 +250,7 @@ extract_repay──┘              ─► [stg_clients  ]─┤─► int_loan_
             f"cd {DBT_DIR} && "
             f"dbt test --profiles-dir {DBT_PROFILES}"
         ),
+        env=_dbt_env,
         doc_md="Tests de qualité définis dans schema.yml (not_null, unique, accepted_values)",
     )
 
