@@ -4,9 +4,9 @@ set -euo pipefail
 echo "=== ELT Microfinance Demo — Setup ==="
 
 # 1. Vérifier Python 3.10+
-PY=$(python3 --version 2>&1 | grep -oP '(?<=3\.)\d+' || echo "0")
+PY=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo "0")
 if [ "$PY" -lt 10 ]; then
-  echo "Python 3.10+ requis (trouvé : $(python3 --version))"; exit 1
+  echo "Python 3.10+ requis (trouvé : $(python3 --version 2>&1))"; exit 1
 fi
 
 # 2. Venv
