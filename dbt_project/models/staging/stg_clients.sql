@@ -11,7 +11,7 @@ SELECT
         CURRENT_DATE)                 AS age,
     UPPER(TRIM(genre))                AS gender,
     TRIM(telephone)                   AS phone,
-    INITCAP(TRIM(ville))              AS city,
+    UPPER(TRIM(ville))                AS city,
     CAST(date_inscription AS DATE)    AS registration_date
 FROM raw.clients
 WHERE client_id IS NOT NULL
