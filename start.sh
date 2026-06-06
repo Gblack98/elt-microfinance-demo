@@ -18,18 +18,23 @@ open_url() {
     fi
 }
 
-PIDS=()
 cleanup() {
     echo ""
     echo "Arrêt des services..."
-    for pid in "${PIDS[@]:-}"; do
-        kill "$pid" 2>/dev/null || true
-    done
+    kill "$SCHEDULER_PID" "$WEBSERVER_PID" "$STREAMLIT_PID" 2>/dev/null || true
     exit 0
 }
 trap cleanup INT TERM
 
-# ── 1. Setup si pas encore fait ──────────────────────────────────────────────
+# ── 1. Tuer les anciens processus Airflow/Streamlit sur ces ports ─────────────
+echo "Nettoyage des anciens processus..."
+lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+lsof -ti :8501 | xargs kill -9 2>/dev/null || true
+pkill -f "airflow scheduler" 2>/dev/null || true
+pkill -f "airflow webserver" 2>/dev/null || true
+sleep 2
+
+# ── 2. Setup si pas encore fait ──────────────────────────────────────────────
 if [ ! -f "$AIRFLOW_BIN" ]; then
     echo "Premier lancement — installation en cours (3-5 min)..."
     bash "$PROJECT_DIR/init.sh"
@@ -40,43 +45,40 @@ export ELT_PROJECT_DIR="$PROJECT_DIR"
 export AIRFLOW__CORE__LOAD_EXAMPLES=False
 export PATH="$VENV/bin:$PATH"
 
-# ── 2. Copier le DAG ─────────────────────────────────────────────────────────
+# ── 3. Copier le DAG ─────────────────────────────────────────────────────────
 mkdir -p "$AIRFLOW_HOME/dags"
 cp "$PROJECT_DIR/dags/elt_pipeline.py" "$AIRFLOW_HOME/dags/"
 
-# ── 3. Scheduler ─────────────────────────────────────────────────────────────
+# ── 4. Scheduler ─────────────────────────────────────────────────────────────
 echo "Démarrage du scheduler Airflow..."
 "$AIRFLOW_BIN" scheduler > "$LOG_DIR/scheduler.log" 2>&1 &
-PIDS+=($!)
-sleep 3
+SCHEDULER_PID=$!
+sleep 5
 
-# Vérifier que le scheduler est bien lancé
-if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
-    echo "Erreur scheduler — dernières lignes du log :"
-    tail -10 "$LOG_DIR/scheduler.log"
+if ! kill -0 "$SCHEDULER_PID" 2>/dev/null; then
+    echo "Erreur scheduler — log :"
+    tail -15 "$LOG_DIR/scheduler.log"
     exit 1
 fi
+echo "Scheduler démarré ✓"
 
-# ── 4. Webserver ──────────────────────────────────────────────────────────────
+# ── 5. Webserver ──────────────────────────────────────────────────────────────
 echo "Démarrage du webserver Airflow..."
 "$AIRFLOW_BIN" webserver -p 8080 > "$LOG_DIR/webserver.log" 2>&1 &
-PIDS+=($!)
+WEBSERVER_PID=$!
 
-# ── 5. Attendre le webserver (max 3 min) ─────────────────────────────────────
+# ── 6. Attendre le webserver (max 3 min) ─────────────────────────────────────
 echo -n "Attente du webserver"
 WAIT=0
-READY=false
+READY="false"
 while [ "$WAIT" -lt 180 ]; do
     if curl -s "http://localhost:8080/health" 2>/dev/null | grep -q "healthy"; then
-        READY=true
-        break
+        READY="true"; break
     fi
     if curl -s "http://localhost:8080/" 2>/dev/null | grep -qi "airflow"; then
-        READY=true
-        break
+        READY="true"; break
     fi
-    # Vérifier que le webserver n'a pas crashé
-    if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
+    if ! kill -0 "$WEBSERVER_PID" 2>/dev/null; then
         echo ""
         echo "Le webserver a crashé. Log :"
         tail -20 "$LOG_DIR/webserver.log"
@@ -87,28 +89,29 @@ while [ "$WAIT" -lt 180 ]; do
     WAIT=$((WAIT + 3))
 done
 
-if [ "$READY" = true ]; then
+if [ "$READY" = "true" ]; then
     echo " ✓"
 else
     echo ""
-    echo "Webserver lent — il est peut-être prêt, ouvre http://localhost:8080"
+    echo "Webserver lent — ouvre http://localhost:8080 dans ton navigateur"
 fi
 
-# ── 6. Ouvrir Airflow ────────────────────────────────────────────────────────
+# ── 7. Ouvrir Airflow ────────────────────────────────────────────────────────
 open_url "http://localhost:8080"
 echo "Airflow → http://localhost:8080  (admin / admin)"
 
-# ── 7. Déclencher le DAG ─────────────────────────────────────────────────────
+# ── 8. Déclencher le DAG ─────────────────────────────────────────────────────
 echo "Déclenchement du pipeline ELT..."
 "$AIRFLOW_BIN" dags unpause elt_microfinance_pipeline > /dev/null 2>&1 || true
 "$AIRFLOW_BIN" dags trigger elt_microfinance_pipeline > /dev/null 2>&1 || true
 echo "Pipeline lancé ✓"
 
-# ── 8. Attendre la fin du DAG ────────────────────────────────────────────────
+# ── 9. Attendre la fin du DAG ────────────────────────────────────────────────
 echo -n "Pipeline en cours"
-for i in $(seq 1 72); do
+i=0
+while [ "$i" -lt 72 ]; do
     STATE=$("$PYTHON_BIN" - <<'PYEOF'
-import subprocess, json, sys, os
+import subprocess, json, os
 env = os.environ.copy()
 r = subprocess.run(
     ["airflow", "dags", "list-runs", "-d", "elt_microfinance_pipeline", "--output", "json"],
@@ -131,14 +134,15 @@ PYEOF
     fi
     printf "."
     sleep 5
+    i=$((i + 1))
 done
 
-# ── 9. Streamlit ─────────────────────────────────────────────────────────────
+# ── 10. Streamlit ─────────────────────────────────────────────────────────────
 echo "Démarrage du dashboard Streamlit..."
 "$STREAMLIT_BIN" run "$PROJECT_DIR/dashboard.py" \
     --server.port 8501 --server.headless true \
     > "$LOG_DIR/streamlit.log" 2>&1 &
-PIDS+=($!)
+STREAMLIT_PID=$!
 sleep 4
 open_url "http://localhost:8501"
 
