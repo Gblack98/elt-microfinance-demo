@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo "=== ELT Microfinance Demo — Setup ==="
 
+# Neutraliser tout AIRFLOW_HOME défini ailleurs
+unset AIRFLOW_HOME
+
 # ── 1. Trouver Python 3.12 (Airflow ne supporte pas 3.13+) ───────────────────
 find_python() {
     for cmd in python3.12 python3.11 python3.10 python3; do

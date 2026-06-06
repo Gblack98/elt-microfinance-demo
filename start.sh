@@ -10,6 +10,9 @@ AIRFLOW_HOME="$PROJECT_DIR/airflow_home"
 LOG_DIR="$PROJECT_DIR/logs/run"
 mkdir -p "$LOG_DIR"
 
+# Neutraliser tout AIRFLOW_HOME défini ailleurs (autre installation Airflow)
+unset AIRFLOW_HOME
+
 open_url() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         open "$1"
