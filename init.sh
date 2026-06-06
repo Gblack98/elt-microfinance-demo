@@ -22,6 +22,12 @@ AIRFLOW_VERSION=2.10.4
 PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 
+# Si pas de constraint file pour cette version Python, on tombe sur 3.12
+if ! curl -sf "$CONSTRAINT_URL" -o /dev/null; then
+  echo "Pas de constraint file pour Python ${PYTHON_VERSION}, utilisation de Python 3.12..."
+  CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+fi
+
 echo "Installation d'Airflow ${AIRFLOW_VERSION} (Python ${PYTHON_VERSION})..."
 pip install -q "apache-airflow==${AIRFLOW_VERSION}" --constraint "${CONSTRAINT_URL}"
 
