@@ -60,10 +60,18 @@ airflow webserver -p 8080 > "$LOG_DIR/webserver.log" 2>&1 &
 PIDS+=($!)
 
 # ── 5. Attendre que le webserver soit prêt ───────────────────────────────────
-echo -n "Attente du webserver"
-until curl -s "http://localhost:8080/api/v1/health" 2>/dev/null | grep -q "healthy"; do
+echo -n "Attente du webserver (max 2 min)"
+WAIT=0
+until curl -s "http://localhost:8080/health" 2>/dev/null | grep -q "healthy" || \
+      curl -s "http://localhost:8080/" 2>/dev/null | grep -q "Airflow"; do
     printf "."
-    sleep 2
+    sleep 3
+    WAIT=$((WAIT + 3))
+    if [ "$WAIT" -ge 120 ]; then
+        echo ""
+        echo "Le webserver met du temps — ouvre http://localhost:8080 manuellement."
+        break
+    fi
 done
 echo " ✓"
 
