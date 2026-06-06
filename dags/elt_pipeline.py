@@ -25,7 +25,7 @@ import duckdb
 # ─────────────────────────────────────────────────────────
 # Chemins
 # ─────────────────────────────────────────────────────────
-PROJECT_DIR  = Path(os.environ.get("ELT_PROJECT_DIR", Path(__file__).parents[1]))
+PROJECT_DIR  = Path(os.environ.get("ELT_PROJECT_DIR", Path(__file__).parents[2]))
 DATA_DIR     = PROJECT_DIR / "data" / "raw"
 DB_PATH      = str(PROJECT_DIR / "warehouse.duckdb")
 DBT_DIR      = str(PROJECT_DIR / "dbt_project")
