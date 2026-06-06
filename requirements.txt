@@ -1,0 +1,14 @@
+# Pipeline ELT Microfinance – dépendances
+# Testé Python 3.10+
+
+# Orchestration
+apache-airflow==2.9.3
+
+# Data Warehouse local
+duckdb==0.10.3
+
+# dbt adapter DuckDB
+dbt-duckdb==1.8.1
+
+# Utilitaires
+pandas==2.2.2

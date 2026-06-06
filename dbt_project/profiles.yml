@@ -1,0 +1,10 @@
+elt_demo:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Chemin vers la base DuckDB créée par Airflow.
+      # Définir la variable d'env ELT_PROJECT_DIR, sinon adapter le chemin.
+      path: "{{ env_var('ELT_PROJECT_DIR', '../..') }}/warehouse.duckdb"
+      schema: main
+      threads: 4

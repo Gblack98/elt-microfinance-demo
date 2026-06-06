@@ -1,0 +1,32 @@
+# Base DuckDB générée à l'exécution
+warehouse.duckdb
+*.duckdb
+
+# Airflow runtime
+airflow_home/
+logs/
+airflow.cfg
+airflow.db
+webserver_config.py
+
+# dbt artifacts
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/.user.yml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Env
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

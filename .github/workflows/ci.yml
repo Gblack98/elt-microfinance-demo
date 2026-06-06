@@ -1,0 +1,48 @@
+name: CI — ELT Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install duckdb==0.10.3 dbt-duckdb==1.8.1 pandas==2.2.2
+
+      - name: Generate data
+        run: python3 scripts/generate_data.py
+
+      - name: Load CSV into DuckDB
+        run: |
+          python3 - <<'PYEOF'
+          import duckdb
+          con = duckdb.connect("warehouse.duckdb")
+          con.execute("CREATE SCHEMA IF NOT EXISTS raw")
+          for t in ["clients", "loans", "repayments"]:
+              con.execute(f"DROP TABLE IF EXISTS raw.{t}")
+              con.execute(f"CREATE TABLE raw.{t} AS SELECT * FROM read_csv_auto('data/raw/{t}.csv', header=true)")
+              print(f"raw.{t} → {con.execute(f'SELECT COUNT(*) FROM raw.{t}').fetchone()[0]} rows")
+          con.close()
+          PYEOF
+
+      - name: dbt run
+        working-directory: dbt_project
+        env:
+          ELT_PROJECT_DIR: ${{ github.workspace }}
+        run: dbt run --profiles-dir .
+
+      - name: dbt test
+        working-directory: dbt_project
+        env:
+          ELT_PROJECT_DIR: ${{ github.workspace }}
+        run: dbt test --profiles-dir .

@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: int_loan_with_repayments
+    description: "Jointure prêts × remboursements agrégés, avec qualité emprunteur"
+    columns:
+      - name: loan_id
+        tests: [not_null, unique]
+      - name: repayment_rate
+        description: "Ratio total_repaid / loan_amount"
+      - name: borrower_quality
+        tests:
+          - accepted_values:
+              values: ['excellent','good','at_risk','bad']

@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: fct_portfolio_summary
+    description: "Table de faits : un prêt par ligne, enrichi client + métriques de remboursement"
+    columns:
+      - name: loan_id
+        tests: [not_null, unique]
+      - name: repayment_rate
+        description: "Ratio remboursé / montant initial (peut dépasser 1 si overpaid)"
+      - name: borrower_quality
+        tests:
+          - accepted_values:
+              values: ['excellent','good','at_risk','bad']
+      - name: is_default
+        tests: [not_null]

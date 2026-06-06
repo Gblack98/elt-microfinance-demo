@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: stg_loans
+    description: "Prêts nettoyés et typés depuis raw.loans"
+    columns:
+      - name: loan_id
+        description: "Identifiant unique du prêt"
+        tests:
+          - not_null
+          - unique
+      - name: client_id
+        tests: [not_null]
+      - name: loan_amount
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['ACTIVE','CLOSED','DEFAULTED','OVERPAID']
+      - name: currency_code
+        tests:
+          - accepted_values:
+              values: ['XOF','EUR','USD']
+
+  - name: stg_clients
+    description: "Clients normalisés"
+    columns:
+      - name: client_id
+        tests:
+          - not_null
+          - unique
+      - name: gender
+        tests:
+          - accepted_values:
+              values: ['M','F']
+
+  - name: stg_repayments
+    description: "Remboursements validés"
+    columns:
+      - name: repayment_id
+        tests:
+          - not_null
+          - unique
+      - name: loan_id
+        tests: [not_null]
+      - name: payment_status
+        tests:
+          - accepted_values:
+              values: ['PAID','LATE']
