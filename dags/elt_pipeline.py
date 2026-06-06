@@ -194,8 +194,15 @@ extract_repay──┘              ─► [stg_clients  ]─┤─► int_loan_
         doc_md="Charge les 3 CSV dans DuckDB (schéma raw) via read_csv_auto()",
     )
 
-    # Variable d'environnement transmise à tous les BashOperator dbt
-    _dbt_env = {"ELT_PROJECT_DIR": str(PROJECT_DIR)}
+    # Environnement transmis à tous les BashOperator dbt :
+    # env= remplace tout l'environnement, donc on doit réinjecter PATH
+    # avec le bin du venv pour que `dbt` soit trouvable.
+    _venv_bin = str(PROJECT_DIR / ".venv" / "bin")
+    _dbt_env = {
+        "ELT_PROJECT_DIR": str(PROJECT_DIR),
+        "PATH": _venv_bin + ":" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", ""),
+    }
 
     # ── 3. STAGING dbt (3 modèles parallèles) ─────────────
     with TaskGroup("dbt_staging", tooltip="Nettoyage et typage (vues dbt)") as tg_staging:
