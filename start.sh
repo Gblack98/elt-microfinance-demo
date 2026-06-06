@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Neutraliser toute installation Airflow existante sur la machine
+unset AIRFLOW_HOME
+unset AIRFLOW__CORE__LOAD_EXAMPLES
+
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
@@ -6,12 +11,13 @@ VENV="$PROJECT_DIR/.venv"
 AIRFLOW_BIN="$VENV/bin/airflow"
 STREAMLIT_BIN="$VENV/bin/streamlit"
 PYTHON_BIN="$VENV/bin/python3"
-AIRFLOW_HOME="$PROJECT_DIR/airflow_home"
 LOG_DIR="$PROJECT_DIR/logs/run"
 mkdir -p "$LOG_DIR"
 
-# Neutraliser tout AIRFLOW_HOME défini ailleurs (autre installation Airflow)
-unset AIRFLOW_HOME
+export AIRFLOW_HOME="$PROJECT_DIR/airflow_home"
+export ELT_PROJECT_DIR="$PROJECT_DIR"
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+export PATH="$VENV/bin:$PATH"
 
 open_url() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -21,20 +27,27 @@ open_url() {
     fi
 }
 
+SCHEDULER_PID=""
+WEBSERVER_PID=""
+STREAMLIT_PID=""
+
 cleanup() {
     echo ""
     echo "Arrêt des services..."
-    kill "$SCHEDULER_PID" "$WEBSERVER_PID" "$STREAMLIT_PID" 2>/dev/null || true
+    [ -n "$SCHEDULER_PID" ]  && kill "$SCHEDULER_PID"  2>/dev/null || true
+    [ -n "$WEBSERVER_PID" ]  && kill "$WEBSERVER_PID"  2>/dev/null || true
+    [ -n "$STREAMLIT_PID" ]  && kill "$STREAMLIT_PID"  2>/dev/null || true
     exit 0
 }
 trap cleanup INT TERM
 
-# ── 1. Tuer les anciens processus Airflow/Streamlit sur ces ports ─────────────
+# ── 1. Tuer les anciens processus sur ces ports ───────────────────────────────
 echo "Nettoyage des anciens processus..."
 lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 lsof -ti :8501 | xargs kill -9 2>/dev/null || true
 pkill -f "airflow scheduler" 2>/dev/null || true
 pkill -f "airflow webserver" 2>/dev/null || true
+pkill -f "airflow api-server" 2>/dev/null || true
 sleep 2
 
 # ── 2. Setup si pas encore fait ──────────────────────────────────────────────
@@ -43,16 +56,21 @@ if [ ! -f "$AIRFLOW_BIN" ]; then
     bash "$PROJECT_DIR/init.sh"
 fi
 
-export AIRFLOW_HOME
-export ELT_PROJECT_DIR="$PROJECT_DIR"
-export AIRFLOW__CORE__LOAD_EXAMPLES=False
-export PATH="$VENV/bin:$PATH"
-
 # ── 3. Copier le DAG ─────────────────────────────────────────────────────────
 mkdir -p "$AIRFLOW_HOME/dags"
 cp "$PROJECT_DIR/dags/elt_pipeline.py" "$AIRFLOW_HOME/dags/"
 
-# ── 4. Scheduler ─────────────────────────────────────────────────────────────
+# ── 4. Init DB Airflow si besoin ──────────────────────────────────────────────
+if [ ! -f "$AIRFLOW_HOME/airflow.db" ]; then
+    echo "Initialisation de la base Airflow..."
+    "$AIRFLOW_BIN" db migrate > /dev/null 2>&1
+    "$AIRFLOW_BIN" users create \
+        --username admin --password admin \
+        --firstname Admin --lastname User \
+        --role Admin --email admin@example.com > /dev/null 2>&1
+fi
+
+# ── 5. Scheduler ─────────────────────────────────────────────────────────────
 echo "Démarrage du scheduler Airflow..."
 "$AIRFLOW_BIN" scheduler > "$LOG_DIR/scheduler.log" 2>&1 &
 SCHEDULER_PID=$!
@@ -65,12 +83,12 @@ if ! kill -0 "$SCHEDULER_PID" 2>/dev/null; then
 fi
 echo "Scheduler démarré ✓"
 
-# ── 5. Webserver ──────────────────────────────────────────────────────────────
+# ── 6. Webserver ──────────────────────────────────────────────────────────────
 echo "Démarrage du webserver Airflow..."
 "$AIRFLOW_BIN" webserver -p 8080 > "$LOG_DIR/webserver.log" 2>&1 &
 WEBSERVER_PID=$!
 
-# ── 6. Attendre le webserver (max 3 min) ─────────────────────────────────────
+# ── 7. Attendre le webserver (max 3 min) ─────────────────────────────────────
 echo -n "Attente du webserver"
 WAIT=0
 READY="false"
@@ -99,17 +117,17 @@ else
     echo "Webserver lent — ouvre http://localhost:8080 dans ton navigateur"
 fi
 
-# ── 7. Ouvrir Airflow ────────────────────────────────────────────────────────
+# ── 8. Ouvrir Airflow ────────────────────────────────────────────────────────
 open_url "http://localhost:8080"
 echo "Airflow → http://localhost:8080  (admin / admin)"
 
-# ── 8. Déclencher le DAG ─────────────────────────────────────────────────────
+# ── 9. Déclencher le DAG ─────────────────────────────────────────────────────
 echo "Déclenchement du pipeline ELT..."
 "$AIRFLOW_BIN" dags unpause elt_microfinance_pipeline > /dev/null 2>&1 || true
 "$AIRFLOW_BIN" dags trigger elt_microfinance_pipeline > /dev/null 2>&1 || true
 echo "Pipeline lancé ✓"
 
-# ── 9. Attendre la fin du DAG ────────────────────────────────────────────────
+# ── 10. Attendre la fin du DAG ───────────────────────────────────────────────
 echo -n "Pipeline en cours"
 i=0
 while [ "$i" -lt 72 ]; do
@@ -140,7 +158,7 @@ PYEOF
     i=$((i + 1))
 done
 
-# ── 10. Streamlit ─────────────────────────────────────────────────────────────
+# ── 11. Streamlit ─────────────────────────────────────────────────────────────
 echo "Démarrage du dashboard Streamlit..."
 "$STREAMLIT_BIN" run "$PROJECT_DIR/dashboard.py" \
     --server.port 8501 --server.headless true \
